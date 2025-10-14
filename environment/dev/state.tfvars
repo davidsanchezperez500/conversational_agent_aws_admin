@@ -1,4 +1,4 @@
-bucket         = "conversational-agent-terraform-state"
+bucket = "conversational-agent-terraform-state"
+key    = "dev/terraform.tfstate"
+region = "us-east-1"
 # dynamodb_table = "conversational-agent-terraform-lock-dev"
-key            = "dev/terraform.tfstate"
-region         = "us-east-1"

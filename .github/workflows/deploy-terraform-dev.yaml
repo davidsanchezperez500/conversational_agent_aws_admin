@@ -1,0 +1,86 @@
+name: Deploy Terraform DEV
+
+on:
+  push:
+    branches:
+      - 'main'
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  terraform-plan:
+    name: Terraform Plan Dev
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    environment: dev
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v5.1.0
+        with:
+          role-to-assume: arn:aws:iam::853878127117:role/github-actions-oidc-role-dev
+          aws-region: us-east-1
+          role-session-name: github-actions-${{ github.run_id }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.13.3
+  
+      - name: Terraform Plan
+        id: plan
+        run: |
+          terraform init -input=false -backend-config=environment/dev/state.tfvars -reconfigure
+          terraform plan -var-file=environment/dev/variables.tfvars -input=false -out=dev.tfplan
+          terraform show --json dev.tfplan > dev-tfplan.json
+
+      - name: Upload Terraform Plan
+        uses: actions/upload-artifact@v4
+        with:
+          name: terraform-plan
+          path: ./dev.tfplan
+          retention-days: 1
+  
+  terraform-apply:
+    name: Terraform Apply Dev
+    needs: terraform-plan
+    runs-on: ubuntu-latest
+    permissions:
+      contents: 'write'
+      id-token: 'write'
+      actions: 'write'
+    environment: dev-apply
+
+    steps:
+      - name: Checkout code
+        uses: 'actions/checkout@v4'
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v5.1.0
+        with:
+          role-to-assume: arn:aws:iam::853878127117:role/github-actions-oidc-role-dev
+          aws-region: us-east-1
+          role-session-name: github-actions-${{ github.run_id }}
+
+      - name: Download Terraform Plan
+        uses: actions/download-artifact@v5
+        with:
+          name: terraform-plan
+          path: . 
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.13.3
+          
+      - name: Terraform Apply
+        id: apply
+        run: |
+          terraform init -input=false -backend-config=environment/dev/state.tfvars -reconfigure
+          terraform apply -input=false dev.tfplan
