@@ -84,3 +84,12 @@ jobs:
         run: |
           terraform init -input=false -backend-config=environment/dev/state.tfvars -reconfigure
           terraform apply -input=false dev.tfplan
+
+      - name: Trigger Release Workflow
+        if: success()
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          event-type: terraform_apply_completed
+          client-payload: '{"ref": "${{ github.ref }}", "sha": "${{ github.sha }}"}'
+
