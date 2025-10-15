@@ -1,6 +1,6 @@
 resource "aws_cloudwatch_log_group" "s3_trail_logs" {
   name              = "/aws/cloudtrail/s3-logs"
-  retention_in_days = 30
+  retention_in_days = 365
   kms_key_id        = aws_kms_key.conversational_agent_terraform_state.arn
   tags              = local.aws_common_tags
 }
@@ -79,3 +79,81 @@ output "cloudwatch_log_group_arn" {
   value = aws_cloudwatch_log_group.s3_trail_logs.arn
 }
 # arn:aws:logs:us-east-1:853878127117:log-group:/aws/cloudtrail/s3-logs
+
+
+
+# Logs Networking
+
+# CloudWatch Log Group for VPC Flow Logs
+resource "aws_cloudwatch_log_group" "vpc_flow_logs" {
+  name              = "/aws/vpc/flow-logs"
+  retention_in_days = 365
+  kms_key_id        = aws_kms_key.conversational_agent_terraform_state.arn
+
+  tags = merge(
+    local.aws_common_tags,
+    {
+      Name = "vpc-flow-logs"
+    }
+  )
+}
+
+# IAM Role for VPC Flow Logs
+resource "aws_iam_role" "vpc_flow_logs" {
+  name = "vpc-flow-logs-role"
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [{
+      Effect = "Allow",
+      Principal = {
+        Service = "vpc-flow-logs.amazonaws.com"
+      },
+      Action = "sts:AssumeRole"
+    }]
+  })
+
+  tags = merge(
+    local.aws_common_tags,
+    {
+      Name = "vpc-flow-logs-role"
+    }
+  )
+}
+
+resource "aws_iam_role_policy" "vpc_flow_logs" {
+  name = "vpc-flow-logs-policy"
+  role = aws_iam_role.vpc_flow_logs.id
+  policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [
+      {
+        Effect = "Allow",
+        Action = [
+          "logs:CreateLogGroup",
+          "logs:CreateLogStream",
+          "logs:PutLogEvents"
+        ],
+        Resource = [
+          aws_cloudwatch_log_group.vpc_flow_logs.arn,
+          "${aws_cloudwatch_log_group.vpc_flow_logs.arn}:*"
+        ]
+      }
+    ]
+  })
+}
+
+# VPC Flow Log
+resource "aws_flow_log" "vpc" {
+  log_destination_type = "cloud-watch-logs"
+  log_destination      = aws_cloudwatch_log_group.vpc_flow_logs.arn
+  iam_role_arn         = aws_iam_role.vpc_flow_logs.arn
+  vpc_id               = aws_vpc.main.id
+  traffic_type         = "ALL"
+
+  tags = merge(
+    local.aws_common_tags,
+    {
+      Name = "main-vpc-flow-logs"
+    }
+  )
+}
